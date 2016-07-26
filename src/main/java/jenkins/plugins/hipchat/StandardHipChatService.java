@@ -9,6 +9,7 @@ import org.apache.commons.httpclient.methods.PostMethod;
 import org.apache.commons.httpclient.methods.StringRequestEntity;
 
 import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -79,7 +80,7 @@ public class StandardHipChatService implements HipChatService {
 
     private PostMethod buildV2Notification(String message, String color, String roomId)
             throws UnsupportedEncodingException {
-        String url = "https://" + host + "/v2/room/" + roomId + "/notification?auth_token=" + token;
+        String url = "https://" + host + "/v2/room/" + URLEncoder.encode(roomId, "UTF-8") + "/notification?auth_token=" + token;
 
         JSONObject postJSON = new JSONObject();
         postJSON.put("message", message);

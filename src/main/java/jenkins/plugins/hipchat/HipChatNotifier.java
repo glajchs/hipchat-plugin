@@ -115,7 +115,7 @@ public class HipChatNotifier extends Notifier {
             return sendAs;
         }
 
-        public Boolean getV2API() {
+        public Boolean isV2API() {
             return v2API;
         }
 

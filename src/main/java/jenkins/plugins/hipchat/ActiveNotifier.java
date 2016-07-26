@@ -5,9 +5,11 @@ import hudson.model.*;
 import hudson.scm.ChangeLogSet;
 import hudson.scm.ChangeLogSet.AffectedFile;
 import hudson.scm.ChangeLogSet.Entry;
+import hudson.tasks.test.AbstractTestResultAction;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
@@ -43,7 +45,7 @@ public class ActiveNotifier implements FineGrainedNotifier {
         } else if (cause != null) {
             MessageBuilder message = new MessageBuilder(notifier, build);
             message.append(cause.getShortDescription());
-            notifyStart(build, message.appendOpenLink().toString());
+            notifyStart(build, message.toString());
         } else {
             notifyStart(build, getBuildStatusMessage(build));
         }
@@ -105,14 +107,14 @@ public class ActiveNotifier implements FineGrainedNotifier {
         message.append(" (");
         message.append(files.size());
         message.append(" file(s) changed)");
-        return message.appendOpenLink().toString();
+        return message.toString();
     }
 
     static String getBuildColor(AbstractBuild r) {
         Result result = r.getResult();
         if (result == Result.SUCCESS) {
             return "green";
-        } else if (result == Result.FAILURE) {
+        } else if (result == Result.FAILURE || result == Result.UNSTABLE) {
             return "red";
         } else {
             return "yellow";
@@ -123,7 +125,9 @@ public class ActiveNotifier implements FineGrainedNotifier {
         MessageBuilder message = new MessageBuilder(notifier, r);
         message.appendStatusMessage();
         message.appendDuration();
-        return message.appendOpenLink().toString();
+        message.appendTests(r);
+        message.appendCulprits();
+        return message.toString();
     }
 
     public static class MessageBuilder {
@@ -170,22 +174,90 @@ public class ActiveNotifier implements FineGrainedNotifier {
         }
 
         private MessageBuilder startMessage() {
-            message.append(build.getProject().getDisplayName());
+            message.append("<img src=\"" + notifier.getBuildServerUrl() + "images/24x24/" + build.getProject().getBuildStatusUrl() + "\" alt=\"" + build.getProject().getBuildStatusUrl() + "\"/> ");
+            message.append("<a href=\"" + notifier.getBuildServerUrl() + build.getUrl() + "\">" + build.getProject().getDisplayName() + "</a>");
             message.append(" - ");
             message.append(build.getDisplayName());
             message.append(" ");
             return this;
         }
 
-        public MessageBuilder appendOpenLink() {
-            String url = notifier.getBuildServerUrl() + build.getUrl();
-            message.append(" (<a href='").append(url).append("'>Open</a>)");
-            return this;
-        }
-
         public MessageBuilder appendDuration() {
             message.append(" after ");
             message.append(build.getDurationString());
+            message.append(".");
+            return this;
+        }
+
+        public MessageBuilder appendTests(AbstractBuild abstractBuild) {
+            AbstractTestResultAction testResults = build.getAction(AbstractTestResultAction.class);
+            if (testResults == null) {
+                return this;
+            }
+            int totalTests = testResults.getTotalCount();
+            int failedTests = testResults.getFailCount();
+            int skippedTests = testResults.getSkipCount();
+            if (testResults.getPreviousResult() != null) {
+                int previousTotalTests = testResults.getPreviousResult().getTotalCount();
+                int previousFailedTests = testResults.getPreviousResult().getFailCount();
+                int previousSkippedTests = testResults.getPreviousResult().getSkipCount();
+                if (failedTests == 0) {
+                    message.append(" " + totalTests + " tests passed");
+                    if (previousTotalTests != totalTests) {
+                        message.append(" (" + ((previousTotalTests > totalTests) ? "-" : "+") + Math.abs(previousTotalTests - totalTests) + " total tests)");
+                    }
+                    if (skippedTests > 0) {
+                        message.append(" (" + skippedTests + " tests skipped)");
+                        if (previousSkippedTests != skippedTests) {
+                            message.append(" (" + ((previousSkippedTests > skippedTests) ? "-" : "+") + Math.abs(previousSkippedTests - skippedTests) + " skipped tests)");
+                        }
+                    }
+                } else {
+                    message.append(" " + failedTests + " of " + totalTests + " tests failed");
+                    if (previousFailedTests != failedTests) {
+                        message.append(" (" + ((previousFailedTests > failedTests) ? "-" : "+") + Math.abs(previousFailedTests - failedTests) + " failed tests)");
+                    }
+                    if (previousTotalTests != totalTests) {
+                        message.append(" (" + ((previousTotalTests > totalTests) ? "-" : "+") + Math.abs(previousTotalTests - totalTests) + " total tests)");
+                    }
+                    if (skippedTests > 0) {
+                        message.append(" (" + skippedTests + " tests skipped)");
+                        if (previousSkippedTests != skippedTests) {
+                            message.append(" (" + ((previousSkippedTests > skippedTests) ? "-" : "+") + Math.abs(previousSkippedTests - skippedTests) + " skipped tests)");
+                        }
+                    }
+                }
+            } else {
+                if (failedTests == 0) {
+                    message.append(" " + totalTests + " tests passed");
+                    if (skippedTests > 0) {
+                        message.append(" (" + skippedTests + " tests skipped)");
+                    }
+                } else {
+                    message.append(" " + failedTests + " of " + totalTests + " tests failed");
+                    if (skippedTests > 0) {
+                        message.append(" (" + skippedTests + " tests skipped)");
+                    }
+                }
+            }
+            message.append(".");
+            return this;
+        }
+
+        public MessageBuilder appendCulprits() {
+            Set<User> culprits = build.getCulprits();
+            if (culprits.size() > 0) {
+                message.append(" Changes by ");
+                Iterator culpritsIterator = culprits.iterator();
+                while (culpritsIterator.hasNext()) {
+                    User currentCulprit = (User) culpritsIterator.next();
+                    message.append("<a href=\"" + currentCulprit.getAbsoluteUrl() + "\">" + currentCulprit.getDisplayName() + "</a>");
+                    if (culpritsIterator.hasNext()) {
+                        message.append(", ");
+                    }
+                }
+                message.append(".");
+            }
             return this;
         }
 
